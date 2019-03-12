@@ -1,0 +1,69 @@
+DBMS:
+    - schemas
+
+    - parseQuery(char *query)
+    - processQuery()
+
+class Schema:
+    - char *schemaName
+
+    - char **fieldNames
+    - char **fieldTypes
+    - int *fieldSizes
+    - int numFields
+
+    - FILE *file
+    - int lastOffset
+
+    - KeyList *keyList
+
+    - Schema(char *schemaName, FDPair fieldNamesAndTypes, int *fieldSizes)
+
+    - int insert(FDPair *data)
+    - int *update(FDTriplet key, FDPair data)
+    - int *find(FDPair keys)
+    - int *remove(FDPair *key)
+
+    - bool isEmpty()
+    - bool setKeys(char **keys, int numKeys);
+
+class BPT:
+    - FILE *file
+    - int lastOffset
+
+    - char *keys[]
+    - int numKeys
+
+    - BPT(char *schemaName, char *keys[], int numKeys)
+
+    - int insert(FDPair data, int offset)
+    - int *find(FDTriplet keys)
+    - int *remove(int *offsets)
+
+struct FDPair:
+    - char **fields
+    - char **data
+    - int numFields
+
+struct FDTriplet:
+    - char **fields
+    - char **data
+    - char **other
+    - int numFields
+
+struct Node:
+    - void *key
+    - int parent
+    - int siblings[TREE_DEPTH]
+    - int children[TREE_DEPTH + 1]
+
+struct Leaf:
+    - void *data
+    - int leftSibling
+    - int rightSibling
+
+struct KeyList:
+    char **keys
+    int numKeys
+    BPT *bpt
+    KeyList *next
