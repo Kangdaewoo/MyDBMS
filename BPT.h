@@ -19,7 +19,7 @@ class BPT {
 
         int insert(FDPair data, int offset);
         int *find(FDTriplet keys);
-        int *remove(int *offsets);
+        int *remove(FDTriplet keys);
 };
 
 typedef struct {

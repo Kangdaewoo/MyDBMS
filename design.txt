@@ -1,58 +1,95 @@
 DBMS:
-    - schemas
+    - Map<std::string schemaName, Schema schema> Schemas
 
-    - parseQuery(char *query)
+    - parseQuery(std::string query)
     - processQuery()
 
+    - int getTypeSize(std::string type)
+    - std::string getStatusMessage(int status)
+
 class Schema:
-    - char *schemaName
+    private: 
+        - std::string schemaName
 
-    - char **fieldNames
-    - char **fieldTypes
-    - int *fieldSizes
-    - int numFields
+        - std::string *fieldNames
+        - std::string *fieldTypes
+        - int numFields
 
-    - FILE *file
-    - int lastOffset
+        - PagedFileManager fileManager
+        - int write(FDPair *data)
+        - void read(FDPair *buf, int offset)
+        - std::string rowToChar(FDPair *data)
+        - void charToRow(std::string *buf, FDPair *data)
 
-    - KeyList *keyList
+        - int rowSize
+        - int numRows
 
-    - Schema(char *schemaName, FDPair fieldNamesAndTypes, int *fieldSizes)
+        - LinkedList *keyList
+    
+    public:
+        - Schema(std::string schemaName, FDPair *fieldNamesAndTypes)
 
-    - int insert(FDPair *data)
-    - int *update(FDTriplet key, FDPair data)
-    - int *find(FDPair keys)
-    - int *remove(FDPair *key)
+        // The next 4 methods return status where 0 index indicates the number of statuses being returned.
+        - int *insert(FDPair *data, int numToInsert)
+        - int *update(FDTriplet *keys, FDPair *data)
+        - int *find(FDTriplet *keys)
+        - int *remove(FDTriplet *keys)
 
-    - bool isEmpty()
-    - bool setKeys(char **keys, int numKeys);
+        - bool isEmpty()
+        - int size()
+
+        - bool setKey(std::string *keys, int numKeys)
+
+class PagedFileManager:
+    private:
+        - FILE *file
+        - int rowSize
+        - int pageSize
+
+        // Will probably need more locks for different authorities.
+        - mutex lock
+        - bool lock()
+    
+    public:
+        - PagedFileManager(std::string fileName, int pageSize, int rowSize)
+
+        - bool setIterator()
+        - bool destroyIterator()
+        - bool hasNext()
+        - void next(std::string buf)
+
+        - int write(std::string row) // Returns offset.
+        - void read(std::string buf, int offset)
 
 class BPT:
-    - FILE *file
-    - int lastOffset
+    private:
+        - PagedFileManager fileManager
+        - std::string *keyNames
+        - std::string *keyTypes
+        - int numKeys
+    
+    public:
+        - BPT(std::string schemaName, FDPair *keyNamesAndTypes)
+        - int *insert(FDPair *data, int offset)
+        - int *find(FDTriplet *keys)
+        - int *remove(FDTriplet *keys)
+        // Update is done by removing and inserting again.
 
-    - char *keys[]
-    - int numKeys
-
-    - BPT(char *schemaName, char *keys[], int numKeys)
-
-    - int insert(FDPair data, int offset)
-    - int *find(FDTriplet keys)
-    - int *remove(int *offsets)
+        - bool containsKey(std::string *fields, int numFields)
 
 struct FDPair:
-    - char **fields
-    - char **data
+    - std::string *fields
+    - std::string *data
     - int numFields
 
 struct FDTriplet:
-    - char **fields
-    - char **data
-    - char **other
+    - std::string *fields
+    - std::string *data
+    - std::string *other
     - int numFields
 
 struct Node:
-    - void *key
+    - void **
     - int parent
     - int siblings[TREE_DEPTH]
     - int children[TREE_DEPTH + 1]
@@ -62,8 +99,6 @@ struct Leaf:
     - int leftSibling
     - int rightSibling
 
-struct KeyList:
-    char **keys
-    int numKeys
-    BPT *bpt
-    KeyList *next
+struct LinkedList:
+    - void *ptr
+    - LinkedList *next

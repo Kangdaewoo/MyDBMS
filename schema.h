@@ -1,6 +1,12 @@
 #include "BPT.h"
 #include <stdio.h>
-#include <map>
+
+typedef struct keyList {
+    char **keys;
+    int numKeys;
+    BPT *bpt;
+    keyList *next;
+} KeyList;
 
 class Schema {
     private: 
@@ -13,12 +19,12 @@ class Schema {
 
         KeyList *keyList;
 
-        int totalSize;
+        int rowSize;
+        int numRows;
 
         FILE *file;
-        int lastOffset;
 
-        void writeToFile(FDPair data);
+        int write(FDPair data);
     
     public:
         Schema(char *schemaName, FDPair fieldNamesAndTypes, int *fieldSizes);
@@ -29,5 +35,10 @@ class Schema {
         int *remove(FDPair *key);
         
         bool isEmpty();
+        int size();
+        KeyList *containsKey(char **keys, int numKeys);
         bool setKeys(char **keys, int numKeys);
+
+        void rowToChar(FDPair data, char *buf);
+        void charToRow(char *buf, FDPair *data);
 };

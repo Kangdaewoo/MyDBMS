@@ -2,7 +2,7 @@
 #include <iostream>
 
 
-Schema::Schema(char *schemaName, FDPair fieldNamesAndTypes, int *fieldSizes): numFields(fieldNamesAndTypes.numFields), lastOffset(0) {
+Schema::Schema(char *schemaName, FDPair fieldNamesAndTypes, int *fieldSizes): numFields(fieldNamesAndTypes.numFields) {
     schemaName = malloc(sizeof(char) * strlen(schemaName));
     strcpy(this->schemaName, schemaName);
 
@@ -10,53 +10,65 @@ Schema::Schema(char *schemaName, FDPair fieldNamesAndTypes, int *fieldSizes): nu
     this->fieldTypes = malloc(sizeof(char *) * numFields);
     this->fieldSizes = malloc(sizeof(int) * numFields);
 
-    totalSize = 0;
+    rowSize = 0;
     for (int i = 0; i < numFields; i++) {
-        this->fieldNames[i] = malloc(sizeof(char) * strlen(fieldNamesAndTypes.fields[i]));
-        strcpy_s(this->fieldNames[i], fieldNamesAndTypes.fields[i]);
+        this->fieldNames[i] = malloc(sizeof(char) * (strlen(fieldNamesAndTypes.fields[i]) + 1));
+        strcpy(this->fieldNames[i], fieldNamesAndTypes.fields[i]);
 
-        this->fieldTypes[i] = malloc(sizeof(char) * strlen(fieldNamesAndTypes.data[i]));
-        strcpy_s(this->fieldTypes[i], fieldNamesAndTypes.data[i]);
+        this->fieldTypes[i] = malloc(sizeof(char) * (strlen(fieldNamesAndTypes.data[i]) + 1));
+        strcpy(this->fieldTypes[i], fieldNamesAndTypes.data[i]);
 
         this->fieldSizes[i] = fieldSizes[i];
-        totalSize += fieldSizes[i];
+        rowSize += fieldSizes[i];
     }
+    numRows = 0;
 
     file = fopen(this->schemaName, "w");
     keyList = nullptr;
 }
 
 bool Schema::isEmpty() {
-    return lastOffset == 0;
+    return numRows == 0;
 }
 
-bool setKeys(char **keys, int numKeys) {
+int Schema::size() {
+    return numRows * rowSize;
+}
+
+KeyList *Schema::containsKey(char **keys, int numKeys) {
     KeyList *temp = keyList;
     while (temp != nullptr) {
         bool found = false;
         for (int i = 0; i < numKeys; i++) {
             for (int j = 0; j < temp->numKeys; j++) {
-                if (strcmp(keys[i], temp->keys[j]) == 0) {
-                    found = true;
+                if (strcmp(keys[i], temp->keys[j]) != 0) {
+                    found = false;
                     break;
                 }
+                found = true;
             }
             if (!found) {
                 break;
             }
-            found = false;
         }
         if (found) {
-            return false;
+            return temp;
         }
         temp = temp->next;
+    }
+    return nullptr;
+}
+
+bool Schema::setKeys(char **keys, int numKeys) {
+    if (containsKey(keys, numKeys) != nullptr) {
+        return false;
     }
 
     KeyList *newKeyList = malloc(sizeof(KeyList));
     newKeyList->keys = malloc(sizeof(char *) * numKeys);
     for (int i = 0; i < numKeys; i++) {
         newKeyList->keys[i] = malloc(sizeof(char) * (strlen(keys[i]) + 1));
-        strcpy_s(newKeyList->keys[i], keys[i]);
+        strcpy(newKeyList->keys[i], keys[i]);
     }
     newKeyList->numKeys = numKeys;
     newKeyList->bpt = BPT() // TO DO.
@@ -66,25 +78,52 @@ bool setKeys(char **keys, int numKeys) {
     return true;
 }
 
-void Schema::writeToFile(FDPair data) {
-    fseek(file, lastOffset, SEEK_SET);
+void rowToChar(FDPair data, char *buf) {
+    memset(buf, '\0', sizeof(char) * (rowSize + 1));
+    int cur = 0;
     for (int i = 0; i < numFields; i++) {
-        char toWrite[fieldSizes[i] + 1];
-        memset(toWrite, '\0', fieldSizes[i] + 1);
-        strcpy(toWrite, extractData(data, fieldNames[i]));
-        fwrite(toWrite, sizeof(char), fieldSizes[i], file);
+        int index = find(data.fields, data.numFields, fieldNames[i]);
+        if (index == -1) {
+            // TO DO: throw an error.
+            return;
+        }
+        strcpy(buf + cur, data.fields[index]);
+        cur += fieldSizes[i];
     }
-    lastOffset += totalSize;
+}
+
+void charToRow(char *buf, FDPair *data) {
+    int cur = 0;
+    for (int i = 0; i < numFields; i++) {
+        memset(data->data[i], '\0', sizeof(char) * (fieldSizes[i] + 1));
+        strncpy(data->data[i], buf + cur, fieldSizes[i]);
+    }
+}
+
+int Schema::write(FDPair data) {
+    // TO DO: For every write to file needs to acquire lock.
+    char buf[rowSize + 1];
+    rowToChar(data, buf);
+    numRows++;
+    return writeToFile(buf);
 }
 
 int *Schema::insert(FDPair *data, int numToInsert) {
     int result[numToInsert];
     for (int i = 0; i < numToInsert; i++) {
-        int offset = bpt.insert(data[i], lastOffset);
-        if (offset >= 0) {
-            writeToFile(data[i]);
+        bool isDuplicate = false;
+        // TO DO: Check primary key
+        if (!isDuplicate) {
+            int offset = write(data[i]);
+            KeyList *temp = keyList;
+            while (temp != nullptr) {
+                temp.bpt->insert(data[i], offset);
+                temp = temp->next;
+            }
+            result[i] = offset;
+        } else {
+            result[i] = -1;
         }
-        result[i] = offset;
     }
     return result;
 }
@@ -93,14 +132,18 @@ int *Schema::update(FDTriplet key, FDPair data) {
     KeyList *curList = keyList;
     int *toUpdate = nullptr;
     while (curList != nullptr) {
-        if (containsField(key, curList->keys[0])) {
-            toUpdate = curList->bpt.find(key);
+        if (contains(key.fields, key.numFields, curList->keys[0])) {
+            // TO DO: optimization, find the keyset that contains the most key
+            // But is this really necessary?
+            toUpdate = curList->bpt->find(key);
+            break;
         }
         curList = curList->next;
     }
 
     int *result;
     if (toUpdate == nullptr) {
+        
         // Brute force search.
         // Update file.
         // Remove from every bpt.
@@ -126,26 +169,3 @@ int main() {
     
     return 0;
 }
-
-// class Schema {
-//     private: 
-//         char *schemaName;
-
-//         char **fieldNames;
-//         char **fieldTypes;
-//         int *fieldSizes;
-//         int numFields;
-
-//         FILE *file;
-//         int lastOffset;
-    
-//         BPT *bpt;
-    
-//     public:
-//         Schema(char *schemaName, char **fieldNames, char **fieldTypes, int *fieldSizes, int numFields);
-
-//         int insert(FDPair *data);
-//         int *update(FDPair *key, FDPair *data);
-//         int *find(FDPair keys);
-//         int *remove(FDPair *key);
-// };
