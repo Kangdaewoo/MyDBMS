@@ -89,15 +89,14 @@ struct FDTriplet:
     - int numFields
 
 struct Node:
-    - void **
-    - int parent
-    - int siblings[TREE_DEPTH]
-    - int children[TREE_DEPTH + 1]
-
-struct Leaf:
-    - void *data
-    - int leftSibling
-    - int rightSibling
+    - FDPair *data
+    - unsigned int parent
+    // An offset in data file.
+    // cur == 0 indicates an internal node, otherwise a leaf node (offset == 0 => page directory).
+    - unsigned int cur 
+    // sibling == 0 indicates there's no sibling.
+    - unsigned int leftSibling
+    - unsigned int rightSibling
 
 struct LinkedList:
     - void *ptr
