@@ -8,18 +8,18 @@ DBMS:
     - std::string getStatusMessage(int status)
 
 class Schema:
-    private: 
-        - std::string schemaName
+    private:
+        - const char *schemaName
 
-        - std::string *fieldNames
-        - std::string *fieldTypes
+        - const char *fieldNames[]
+        - const char *fieldTypes[]
         - int numFields
 
         - PagedFileManager fileManager
         - int write(FDPair *data)
         - void read(FDPair *buf, int offset)
-        - std::string rowToChar(FDPair *data)
-        - void charToRow(std::string *buf, FDPair *data)
+        - void rowToString(FDPair data, std::string *buf)
+        - void stringToRow(std::string buf, FDPair *data)
 
         - int rowSize
         - int numRows
@@ -42,7 +42,7 @@ class Schema:
 
 class PagedFileManager:
     private:
-        - FILE *file
+        - ifstream file
         - int rowSize
         - int pageSize
 
@@ -56,16 +56,16 @@ class PagedFileManager:
         - bool setIterator()
         - bool destroyIterator()
         - bool hasNext()
-        - void next(std::string buf)
+        - void next(std::string *buf)
 
-        - int write(std::string row) // Returns offset.
-        - void read(std::string buf, int offset)
+        - int write(std::string row)
+        - int read(int offset, std::string *buf)
 
 class BPT:
     private:
         - PagedFileManager fileManager
-        - std::string *keyNames
-        - std::string *keyTypes
+        - const char *keyNames[]
+        - const char *keyTypes[]
         - int numKeys
     
     public:
@@ -90,13 +90,13 @@ struct FDTriplet:
 
 struct Node:
     - FDPair *data
-    - unsigned int parent
+    - int parent
     // An offset in data file.
     // cur == 0 indicates an internal node, otherwise a leaf node (offset == 0 => page directory).
-    - unsigned int cur 
+    - int cur 
     // sibling == 0 indicates there's no sibling.
-    - unsigned int leftSibling
-    - unsigned int rightSibling
+    - int leftSibling
+    - int rightSibling
 
 struct LinkedList:
     - void *ptr
