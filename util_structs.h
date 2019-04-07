@@ -11,14 +11,10 @@ typedef struct {
     int numFields;
 } FDTriplet;
 
-typedef struct keyList {
-    char **keys;
-    int numKeys;
-    BPT *bpt;
-    keyList *next;
-} KeyList;
+typedef linkedList {
+    void *ptr;
+    linkedList *next;
+} LinkedList;
 
 
-bool contains(char **fields, int numFields, char *field);
-
-int find(char **fields, int numFields, char *field);
+int findField(char *fieldNames[], char field[], int numFields);

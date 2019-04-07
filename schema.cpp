@@ -1,30 +1,175 @@
-#include "schema.h"
-#include <iostream>
+using namespace std;
 
 
-Schema::Schema(char *schemaName, FDPair fieldNamesAndTypes, int *fieldSizes): numFields(fieldNamesAndTypes.numFields) {
-    schemaName = malloc(sizeof(char) * strlen(schemaName));
-    strcpy(this->schemaName, schemaName);
+int Schema::write(FDPair data) {
+    string row = rowToString(data);
+    return fileManager->write(row);
+}
 
-    this->fieldNames = malloc(sizeof(char *) * numFields);
-    this->fieldTypes = malloc(sizeof(char *) * numFields);
-    this->fieldSizes = malloc(sizeof(int) * numFields);
+int Schema::write(FDPair data, int offset) {
+    string row = rowToString(data);
+    return fileManager->write(row, offset);
+}
 
+Schema::Schema(string schemaName, FDPair fieldNamesAndTypes) {
+    this->schemaName = schemaName.c_str();
+
+    numFields = fieldNamesAndTypes.numFields;
+    fieldNames = (char **) malloc(sizeof(char *) * numFields);
+    fieldTypes = (char **) malloc(sizeof(char *) * numFields);
     rowSize = 0;
     for (int i = 0; i < numFields; i++) {
-        this->fieldNames[i] = malloc(sizeof(char) * (strlen(fieldNamesAndTypes.fields[i]) + 1));
-        strcpy(this->fieldNames[i], fieldNamesAndTypes.fields[i]);
-
-        this->fieldTypes[i] = malloc(sizeof(char) * (strlen(fieldNamesAndTypes.data[i]) + 1));
-        strcpy(this->fieldTypes[i], fieldNamesAndTypes.data[i]);
-
-        this->fieldSizes[i] = fieldSizes[i];
-        rowSize += fieldSizes[i];
+        fieldNames[i] = fieldNamesAndTypes.fields[i].c_str();
+        fieldTypes[i] = fieldNamesAndTypes.data[i].c_str();
+        rowSize += getTypeSize(fieldNamesAndTypes.data[i]);
     }
     numRows = 0;
 
-    file = fopen(this->schemaName, "w");
     keyList = nullptr;
+
+    fileManager(schemaName, rowSize * 1000, rowSize);
+}
+
+int Schema::insert(FDPair[] data, int numToInsert) {
+    result = 0;
+    for (int i = 0; i < numToInsert; i++) {
+        // TO DO: Check for duplication.
+
+        string buf = rowToString(data[i]);
+        int offset = fileManager->write(buf);
+        LinkedList *temp = keyList;
+        while (temp != nullptr) {
+            BPT *bpt = (BPT *) temp->ptr;
+            bpt->insert(data[i], offset);
+            temp = temp->next;
+        }
+        numRows++;
+        result++;
+    }
+    return result;
+}
+
+void Schema::updateBPTs(FDTriplet changes, FDPair oldPair, FDPair newPair, int offset) {
+    LinkedList *temp = keyList;
+    while (temp != nullptr) {
+        BPT *bpt = (BPT *) temp->ptr;
+        if (bpt->containsKey(changes.fields, changes.numFields)) {
+            bpt->remove(oldPair, offset);
+            bpt->insert(newPair, offset);
+        }
+        temp = temp->next;
+    }
+}
+
+LinkedList *Schema::findBPT(string[] fields, int numFields) {
+    LinkedList *temp = keyList;
+    LinkedList *toReturn = nullptr;
+    int max = 0;
+    while (temp != nullptr) {
+        BPT *bpt = (BPT *) temp->ptr;
+        int howMany = bpt->containsKey(fields, numFields);
+        if (howMany > max) {
+            max = howMany;
+            toReturn = temp;
+        }
+        temp = temp->next;
+    }
+    return toReturn;
+}
+
+int Schema::update(FDTriplet tests, FDTriplet changes) {
+    LinkedList *toUpdate = find(tests);
+    while (toUpdate != nullptr) {
+        FDPair oldPair = *((FDPair *) toUpdate->ptr);
+        FDPair newPair = applyChanges(oldPair, changes);
+        write(newPair, toUpdate->numFields);
+        updateBPTs(changes, oldPair, newPair, offset);
+
+        LinkedList *temp = toUpdate;
+        toUpdate = toUpdate->next;
+        free(temp->ptr);
+        free(temp);
+
+        result++;
+    }
+    return result;
+}
+
+FDPair Schema::read(int offset) {
+    return stringToRow(fileManager->read(offset));
+}
+
+LinkedList *Schema::find(FDTriplet tests) {
+    LinkedList *result = nullptr;
+    LinkedList *temp = findBPT(tests.fields, tests.numFields);
+    if (temp == nullptr) {
+        fileManager->setIterator();
+        while (fileManager->hasNext()) {
+            string row;
+            int offset = fileManager->next(&row);
+
+            FDPair p = stringToRow(row);
+            if (!satisfy(tests, p)) {
+                continue;
+            }
+
+            temp = (LinkedList *) malloc(sizeof(LinkedList));
+            FDPair *pair = (FDPair *) malloc(sizeof(FDPair));
+            *pair = p;
+            pair->numFields = offset;
+            temp->ptr = pair;
+            temp->next = result;
+            result = temp;
+        }
+    } else {
+        int[] toUpdate = ((BPT *) temp->ptr)->find(tests);
+        for (int i = 0; i < toUpdate[0]; i++) {
+            FDPair p = read(toUpdate[i + 1]);
+            if (!satisfy(tests, p)) {
+                continue;
+            }
+
+            temp = (LinkedList *) malloc(sizeof(LinkedList));
+            FDPair *pair = (FDPair *) malloc(sizeof(FDPair));
+            *pair = p;
+            pair->numFields = toUpdate[i + 1];
+            temp->ptr = pair;
+            temp->next = result;
+            result = temp;
+        }
+
+        for (int i = 0; i < toUpdate[0] + 1; i++) {
+            free(toUpdate[i]);
+        }
+    }
+    return result;
+}
+
+void Schema::removeFromBPTs(FDPair pair, int offset) {
+    LinkedList *temp = keyList;
+    while (temp != nullptr) {
+        BPT *bpt = (BPT *) temp->ptr;
+        bpt->remove(pair, offset);
+        temp = temp->next;
+    }
+}
+
+int Schema::remove(FDTriplet tests) {
+    LinkedList *toRemove = find(tests);
+    while (toRemove != nullptr) {
+        FDPair pair = *((FDPair *) toRemove->ptr);
+        fileManager->remove(toRemove->numFields);
+        removeFromBPTs(pair, offset);
+
+        LinkedList *temp = toRemove;
+        toRemove = toRemove->next;
+        free(temp->ptr);
+        free(temp);
+
+        numRows--;
+        result++;
+    }
+    return result;
 }
 
 bool Schema::isEmpty() {
@@ -32,140 +177,54 @@ bool Schema::isEmpty() {
 }
 
 int Schema::size() {
-    return numRows * rowSize;
+    return numRows;
 }
 
-KeyList *Schema::containsKey(char **keys, int numKeys) {
-    KeyList *temp = keyList;
+bool Schema::setKey(string[] keys, int numKeys) {
+    LinkedList *temp = keyList;
     while (temp != nullptr) {
-        bool found = false;
-        for (int i = 0; i < numKeys; i++) {
-            for (int j = 0; j < temp->numKeys; j++) {
-                if (strcmp(keys[i], temp->keys[j]) != 0) {
-                    found = false;
-                    break;
-                }
-                found = true;
-            }
-            if (!found) {
-                break;
-            }
-        }
-        if (found) {
-            return temp;
+        BPT *bpt = (BPT *) temp->ptr;
+        if (bpt->equals(keys, numKeys)) {
+            return false;
         }
         temp = temp->next;
     }
-    return nullptr;
-}
 
-bool Schema::setKeys(char **keys, int numKeys) {
-    if (containsKey(keys, numKeys) != nullptr) {
-        return false;
-    }
-
-    KeyList *newKeyList = malloc(sizeof(KeyList));
-    newKeyList->keys = malloc(sizeof(char *) * numKeys);
+    temp = (LinkedList *) malloc(sizeof(LinkedList));
+    FDPair newKeys;
+    newKeys.fields = (string *) malloc(sizeof(string) * numKeys);
+    newKeys.types = (string *) malloc(sizeof(string) * numKeys);
     for (int i = 0; i < numKeys; i++) {
-        newKeyList->keys[i] = malloc(sizeof(char) * (strlen(keys[i]) + 1));
-        strcpy(newKeyList->keys[i], keys[i]);
+        int index = findField(fieldNames, keys[i], numFields);
+        newKeys.fields[i] = keys[i];
+        newKeys.data[i] = fieldTypes[index];
     }
-    newKeyList->numKeys = numKeys;
-    newKeyList->bpt = BPT() // TO DO.
 
-    newKeyList->next = keyList;
-    keyList = newKeyList;
-    return true;
+    BPT *newBPT(schemaName, newKeys);
+    temp->ptr = (void *) newBPT;
+    temp->next = keyList;
+    keyList = temp;
 }
 
-void rowToChar(FDPair data, char *buf) {
-    memset(buf, '\0', sizeof(char) * (rowSize + 1));
-    int cur = 0;
+string Schema::rowToString(FDPair data) {
+    string result;
     for (int i = 0; i < numFields; i++) {
-        int index = find(data.fields, data.numFields, fieldNames[i]);
-        if (index == -1) {
-            // TO DO: throw an error.
-            return;
-        }
-        strcpy(buf + cur, data.fields[index]);
-        cur += fieldSizes[i];
-    }
-}
-
-void charToRow(char *buf, FDPair *data) {
-    int cur = 0;
-    for (int i = 0; i < numFields; i++) {
-        memset(data->data[i], '\0', sizeof(char) * (fieldSizes[i] + 1));
-        strncpy(data->data[i], buf + cur, fieldSizes[i]);
-    }
-}
-
-int Schema::write(FDPair data) {
-    // TO DO: For every write to file needs to acquire lock.
-    char buf[rowSize + 1];
-    rowToChar(data, buf);
-    numRows++;
-    return writeToFile(buf);
-}
-
-int *Schema::insert(FDPair *data, int numToInsert) {
-    int result[numToInsert];
-    for (int i = 0; i < numToInsert; i++) {
-        bool isDuplicate = false;
-        // TO DO: Check primary key
-        if (!isDuplicate) {
-            int offset = write(data[i]);
-            KeyList *temp = keyList;
-            while (temp != nullptr) {
-                temp.bpt->insert(data[i], offset);
-                temp = temp->next;
-            }
-            result[i] = offset;
-        } else {
-            result[i] = -1;
-        }
+        int index = findField(data.fields, fieldNames[i], numFields);
+        result.append(data.fields[index]);
     }
     return result;
 }
 
-int *Schema::update(FDTriplet key, FDPair data) {
-    KeyList *curList = keyList;
-    int *toUpdate = nullptr;
-    while (curList != nullptr) {
-        if (contains(key.fields, key.numFields, curList->keys[0])) {
-            // TO DO: optimization, find the keyset that contains the most key
-            // But is this really necessary?
-            toUpdate = curList->bpt->find(key);
-            break;
-        }
-        curList = curList->next;
+FDPair stringToRow(string buf) {
+    FDPair toReturn;
+    toReturn.fields = (string *) malloc(sizeof(string) * numFields);
+    toReturn.data = (string *) malloc(sizeof(string) * numFields);
+    int read = 0;
+    for (int i = 0; i < numFields; i++) {
+        string field(fieldNames[i]);
+        toReturn.fields[i] = fieldNames[i];
+        toReturn.data[i] = buf.substr(read, getTypeSize(fieldTypes[i]));
+        read += fieldTypes[i];
     }
-
-    int *result;
-    if (toUpdate == nullptr) {
-        
-        // Brute force search.
-        // Update file.
-        // Remove from every bpt.
-        // Add to file.
-        // Add to every bpt.
-        // Update result.
-    } else {
-        result = malloc(sizeof(int) * (1 + toUpdate[0]));
-        result[0] = toUpdate[0];
-        for (int i = 0; i < toUpdate[0]; i++) {
-            // Update file.
-            // Remove from every bpt.
-            // Add to file.
-            // Add to every bpt.
-            // Update result.
-        }
-    }
-
-    return result;
-}
-
-int main() {
-    
-    return 0;
+    return toReturn;
 }

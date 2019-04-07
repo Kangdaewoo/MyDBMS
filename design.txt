@@ -7,6 +7,9 @@ DBMS:
     - int getTypeSize(std::string type)
     - std::string getStatusMessage(int status)
 
+    - bool satisfy(FDTriplet tests, FDPair data)
+    - FDPair applyChanges(FDPair data, FDTriplet changes)
+
 class Schema:
     private:
         - const char *schemaName
@@ -15,30 +18,36 @@ class Schema:
         - const char *fieldTypes[]
         - int numFields
 
-        - PagedFileManager fileManager
-        - int write(FDPair *data)
-        - void read(FDPair *buf, int offset)
-        - void rowToString(FDPair data, std::string *buf)
-        - void stringToRow(std::string buf, FDPair *data)
-
         - int rowSize
         - int numRows
 
         - LinkedList *keyList
+
+        - PagedFileManager *fileManager
+        - int write(FDPair data)
+        - int write(FDPair data, int offset)
+        - FDPair read(int offset)
+
+        - std::string rowToString(FDPair data)
+        - FDPair stringToRow(std::string buf)
+
+        // Helpers.
+        - void updateBPTs(FDTriplet changes, FDPair oldPair, FDPair newPair, int offset)
+        - void removeFromBPTs(FDPair pair, int offset)
+        - LinkedList *findBPT(std::string[] fields, int numFields)
     
     public:
-        - Schema(std::string schemaName, FDPair *fieldNamesAndTypes)
+        - Schema(std::string schemaName, FDPair fieldNamesAndTypes)
 
-        // The next 4 methods return status where 0 index indicates the number of statuses being returned.
-        - int *insert(FDPair *data, int numToInsert)
-        - int *update(FDTriplet *keys, FDPair *data)
-        - int *find(FDTriplet *keys)
-        - int *remove(FDTriplet *keys)
+        - int insert(FDPair[] data, int numToInsert)
+        - int update(FDTriplet tests, FDTriplet changes)
+        - LinkedList *find(FDTriplet tests)
+        - int remove(FDTriplet tests)
 
         - bool isEmpty()
         - int size()
 
-        - bool setKey(std::string *keys, int numKeys)
+        - bool setKey(std::string[] keys, int numKeys)
 
 class PagedFileManager:
     private:
@@ -53,13 +62,15 @@ class PagedFileManager:
     public:
         - PagedFileManager(std::string fileName, int pageSize, int rowSize)
 
-        - bool setIterator()
+        - void setIterator()
         - bool destroyIterator()
         - bool hasNext()
-        - void next(std::string *buf)
+        - int next(std::string *buf)
 
         - int write(std::string row)
-        - int read(int offset, std::string *buf)
+        - void write(std::string row, int offset)
+        - std::string read(int offset)
+        - void remove(int offset)
 
 class BPT:
     private:
@@ -69,23 +80,25 @@ class BPT:
         - int numKeys
     
     public:
-        - BPT(std::string schemaName, FDPair *keyNamesAndTypes)
-        - int *insert(FDPair *data, int offset)
-        - int *find(FDTriplet *keys)
-        - int *remove(FDTriplet *keys)
-        // Update is done by removing and inserting again.
+        - BPT(std::string schemaName, FDPair keyNamesAndTypes)
 
-        - bool containsKey(std::string *fields, int numFields)
+        - void insert(FDPair data, int offset)
+        - int[] find(FDTriplet tests)
+        - void remove(FDPair pair, int offset)
+        // Update is done by removing the old and inserting the new.
+
+        - int containsKey(std::string[] fields, int numFields)
+        - bool equals(std::string[] fields, int numFields)
 
 struct FDPair:
-    - std::string *fields
-    - std::string *data
+    - std::string[] fields
+    - std::string[] data
     - int numFields
 
 struct FDTriplet:
-    - std::string *fields
-    - std::string *data
-    - std::string *other
+    - std::string[] fields
+    - std::string[] data
+    - std::string[] other
     - int numFields
 
 struct Node:
@@ -101,3 +114,6 @@ struct Node:
 struct LinkedList:
     - void *ptr
     - LinkedList *next
+
+utils:
+    - FDPair updateFDPair(FDPair data, FDTriplet changes);

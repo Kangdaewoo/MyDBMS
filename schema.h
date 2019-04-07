@@ -1,44 +1,40 @@
-#include "BPT.h"
-#include <stdio.h>
-
-typedef struct keyList {
-    char **keys;
-    int numKeys;
-    BPT *bpt;
-    keyList *next;
-} KeyList;
+using namespace std;
 
 class Schema {
     private: 
-        char *schemaName;
-
-        char **fieldNames;
-        char **fieldTypes;
-        int *fieldSizes;
+        const char *schemaName;
+        
+        const char *fieldNames[];
+        const char *fieldTypes[];
         int numFields;
-
-        KeyList *keyList;
 
         int rowSize;
         int numRows;
 
-        FILE *file;
+        LinkedList *keyList;
 
+        PagedFileManager *fileManager;
         int write(FDPair data);
+        int write(FDPair data, int offset);
+        FDPair read(int offset);
+
+        string rowToString(FDPair data);
+        FDPair stringToRow(string buf);
+
+        void updateBPTs(FDTriplet changes, FDPair oldPair, FDPair newPair, int offset);
+        void removeFromBPTs(FDPair pair, int offset);
+        LinkedList *findBPT(string[] fields, int numFields);
     
     public:
-        Schema(char *schemaName, FDPair fieldNamesAndTypes, int *fieldSizes);
+        Schema(string schemaName, FDPair fieldNamesAndTypes);
 
-        int insert(FDPair *data);
-        int *update(FDTriplet key, FDPair data);
-        int *find(FDPair keys);
-        int *remove(FDPair *key);
-        
+        int insert(FDPair[] data, int numToInsert);
+        int update(FDTriplet tests, FDTriplet changes);
+        LinkedList *find(FDTriplet tests);
+        int remove(FDTriplet tests);
+
         bool isEmpty();
         int size();
-        KeyList *containsKey(char **keys, int numKeys);
-        bool setKeys(char **keys, int numKeys);
 
-        void rowToChar(FDPair data, char *buf);
-        void charToRow(char *buf, FDPair *data);
+        bool setKey(string[] keys, int numKeys);
 };
