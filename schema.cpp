@@ -1,3 +1,5 @@
+#include "schema.h"
+
 using namespace std;
 
 
@@ -15,8 +17,8 @@ Schema::Schema(string schemaName, FDPair fieldNamesAndTypes) {
     this->schemaName = schemaName.c_str();
 
     numFields = fieldNamesAndTypes.numFields;
-    fieldNames = (char **) malloc(sizeof(char *) * numFields);
-    fieldTypes = (char **) malloc(sizeof(char *) * numFields);
+    fieldNames = (const char **) malloc(sizeof(char *) * numFields);
+    fieldTypes = (const char **) malloc(sizeof(char *) * numFields);
     rowSize = 0;
     for (int i = 0; i < numFields; i++) {
         fieldNames[i] = fieldNamesAndTypes.fields[i].c_str();
@@ -27,7 +29,7 @@ Schema::Schema(string schemaName, FDPair fieldNamesAndTypes) {
 
     keyList = nullptr;
 
-    fileManager(schemaName, rowSize * 1000, rowSize);
+    fileManager = PagedFileManager(schemaName, rowSize * 1000, rowSize);
 }
 
 int Schema::insert(FDPair[] data, int numToInsert) {
@@ -207,12 +209,15 @@ bool Schema::setKey(string[] keys, int numKeys) {
 }
 
 string Schema::rowToString(FDPair data) {
-    string result;
+    char buf[rowSize + 1];
+    memset(buf, '\0', rowSize + 1);
+    int written = 0;
     for (int i = 0; i < numFields; i++) {
         int index = findField(data.fields, fieldNames[i], numFields);
-        result.append(data.fields[index]);
+        strcpy(&buf[written], data.fields[index]);
+        written += getTypeSize(fieldTypes[i]);
     }
-    return result;
+    return string(buf);
 }
 
 FDPair stringToRow(string buf) {
@@ -223,8 +228,9 @@ FDPair stringToRow(string buf) {
     for (int i = 0; i < numFields; i++) {
         string field(fieldNames[i]);
         toReturn.fields[i] = fieldNames[i];
-        toReturn.data[i] = buf.substr(read, getTypeSize(fieldTypes[i]));
-        read += fieldTypes[i];
+        int size = getTypeSize(fieldTypes[i])
+        toReturn.data[i] = buf.substr(read, size);
+        read += getTypeSize(fieldTypes[i]);
     }
     return toReturn;
 }

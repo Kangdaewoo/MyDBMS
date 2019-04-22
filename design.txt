@@ -51,13 +51,28 @@ class Schema:
 
 class PagedFileManager:
     private:
-        - ifstream file
+        - fstream file
         - int rowSize
         - int pageSize
 
         // Will probably need more locks for different authorities.
         - mutex lock
-        - bool lock()
+        - void lock()
+        - void unlock();
+
+        // Helpers.
+        const unsigned int OCCUPIED
+        const unsigned int EMPTY
+
+        int curPage
+        int curSlot
+        unsigned char *directoryBuffer
+        void loadDirectory(int page)
+        void nextPageSlot(int page, int slot, const unsigned char occupancy)
+        int nextSlot(int page, int slot, const unsigned char occupancy)
+        bool checkBit(unsigned char c, int slotNum, unsigned char occupancy)
+        void writeToFile(char *buf, int page, int row, int size)
+        void readFromFile(char *buf, int page, int row, int size)
     
     public:
         - PagedFileManager(std::string fileName, int pageSize, int rowSize)
@@ -72,12 +87,19 @@ class PagedFileManager:
         - std::string read(int offset)
         - void remove(int offset)
 
+        - int nextEmptySlot()
+
 class BPT:
     private:
         - PagedFileManager fileManager
         - const char *keyNames[]
         - const char *keyTypes[]
         - int numKeys
+        - int root
+        - int rowSize
+
+        - string rowToString(FDPair data)
+        - FDPair stringToRow(string buf)
     
     public:
         - BPT(std::string schemaName, FDPair keyNamesAndTypes)
@@ -102,12 +124,9 @@ struct FDTriplet:
     - int numFields
 
 struct Node:
-    - FDPair *data
-    - int parent
-    // An offset in data file.
-    // cur == 0 indicates an internal node, otherwise a leaf node (offset == 0 => page directory).
-    - int cur 
-    // sibling == 0 indicates there's no sibling.
+    - bool isLeaf
+    - std::string[] keys
+    - int[] children
     - int leftSibling
     - int rightSibling
 

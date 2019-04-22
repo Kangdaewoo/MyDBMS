@@ -5,32 +5,38 @@
 #define TREE_DEPTH 5
 #endif
 
+using namespace std;
 
 class BPT {
     private:
-        FILE *file;
-        int lastOffset;
-
-        char *keys[];
+        PagedFileManager fileManager;
+        const char *keyNames[];
+        const char *keyTypes[];
         int numKeys;
+        int root;
+        int rowSize;
+
+        // Helpers.
+        string rowToString(FDPair data);
+        FDPair stringToRow(string buf);
 
     public:
-        BPT(char *schemaName, char *keys[], int numKeys);
+        BPT(string schemaName, FDPair keyNamesAndTypes);
 
-        int insert(FDPair data, int offset);
-        int *find(FDTriplet keys);
-        int *remove(FDTriplet keys);
+        void insert(FDPair data, int offset);
+        int[] find(FDTriplet tests);
+        void remove(FDPair pair, int offset);
+        // Update is done by removing the old and inserting the new.
+
+        int containsKey(string[] fields, int numFields);
+        bool equals(string[] fields, int numFields);
 };
 
 typedef struct {
-    void *key;
-    int parent;
-    int siblings[TREE_DEPTH];
-    int children[TREE_DEPTH + 1];
-} Node;
-
-typedef struct {
-    void *data;
+    char *keys[];
+    bool isLeaf;
     int leftSibling;
+    int leftChild;
     int rightSibling;
-} Leaf;
+    int rightChild;
+} Node;

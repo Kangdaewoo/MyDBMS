@@ -1,3 +1,11 @@
+#ifndef SCHEMA_H
+#define SCHEMA_H
+
+#include "util_structs.h"
+#include "FileManager.h"
+#include "BPT.h"
+#include <string>
+
 using namespace std;
 
 class Schema {
@@ -38,3 +46,5 @@ class Schema {
 
         bool setKey(string[] keys, int numKeys);
 };
+
+#endif
