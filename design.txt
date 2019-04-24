@@ -64,6 +64,8 @@ class PagedFileManager:
         const unsigned int OCCUPIED
         const unsigned int EMPTY
 
+        int numPages
+
         int curPage
         int curSlot
         unsigned char *directoryBuffer
@@ -86,8 +88,6 @@ class PagedFileManager:
         - void write(std::string row, int offset)
         - std::string read(int offset)
         - void remove(int offset)
-
-        - int nextEmptySlot()
 
 class BPT:
     private:

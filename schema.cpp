@@ -217,7 +217,7 @@ string Schema::rowToString(FDPair data) {
         strcpy(&buf[written], data.fields[index]);
         written += getTypeSize(fieldTypes[i]);
     }
-    return string(buf);
+    return string(buf, rowSize);
 }
 
 FDPair stringToRow(string buf) {

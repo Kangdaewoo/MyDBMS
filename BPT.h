@@ -36,7 +36,6 @@ typedef struct {
     char *keys[];
     bool isLeaf;
     int leftSibling;
-    int leftChild;
     int rightSibling;
-    int rightChild;
+    int children[];
 } Node;
